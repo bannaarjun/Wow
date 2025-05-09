@@ -1,7 +1,10 @@
 import os
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram import Update
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters
+)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 app = Flask(__name__)
@@ -13,24 +16,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 application.add_handler(CommandHandler("start", start))
 
-# --- Message Handler (for videos) ---
+# --- Message Handler for video and doc/video ---
+video_filter = filters.VIDEO | filters.Document.MimeType("video/mp4")
+
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Received your video. Compression options coming soon!")
+    await update.message.reply_text("Video received! (Compression logic coming soon)")
 
-application.add_handler(MessageHandler(filters.Video | filters.Document.VIDEO, handle_video))
+application.add_handler(MessageHandler(video_filter, handle_video))
 
-# --- Webhook Endpoint ---
+# --- Webhook route ---
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     application.update_queue.put_nowait(update)
     return "ok"
 
-# --- Home Route ---
+# --- Root route ---
 @app.route("/")
 def home():
-    return "Telegram Video Bot is Live!"
+    return "Bot is running!"
 
-# --- Gunicorn Entry Point ---
+# --- Entry point ---
 if __name__ == "__main__":
     app.run(port=10000)
