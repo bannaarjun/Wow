@@ -2,45 +2,43 @@ import os
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
+    Application,
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ContextTypes,
     filters,
 )
+import asyncio
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 app = Flask(__name__)
 
-telegram_app = ApplicationBuilder().token(BOT_TOKEN).build()
+# Create Application
+application: Application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-
-# /start handler
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bot is working! Send a video file.")
 
-
-# Video handler
+# video handler
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Video received!")
 
-
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
-
+# Add handlers
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
 
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-        telegram_app.update_queue.put_nowait(update)
+    # convert incoming request to telegram update
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.run(application.process_update(update))
     return "ok"
 
-
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
-    return "Service Running"
-
+    return "Bot is running."
 
 if __name__ == "__main__":
-    telegram_app.run_polling()
+    app.run(port=10000)
