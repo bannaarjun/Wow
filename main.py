@@ -1,16 +1,37 @@
-
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from flask import Flask, request
+from telegram import Update, Bot
+from telegram.ext import CommandHandler, MessageHandler, filters, CallbackQueryHandler, Dispatcher
 import subprocess
 import uuid
 
+app = Flask(__name__)
+
+# Telegram Bot setup
+TOKEN = os.environ.get("BOT_TOKEN")
+bot = Bot(token=TOKEN)
+dispatcher = Dispatcher(bot, update_queue=None, workers=0)
+
+# Define resolutions for video compression
 RESOLUTIONS = ["240p", "360p", "480p", "720p", "1080p"]
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+@app.route('/')
+def hello_world():
+    return "Telegram Bot is running!"
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    # Get the latest update from Telegram
+    json_str = request.get_data().decode('UTF-8')
+    update = Update.de_json(json_str, bot)
+    
+    dispatcher.process_update(update)  # Process the update using the dispatcher
+    return 'OK'
+
+async def start(update, context):
     await update.message.reply_text("नमस्ते! कृपया अपनी वीडियो फाइल भेजें।")
 
-async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_video(update, context):
     file = update.message.video or update.message.document
     if not file:
         await update.message.reply_text("कृपया एक वीडियो फाइल भेजें।")
@@ -28,7 +49,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("कृपया वांछित गुणवत्ता चुनें:", reply_markup=reply_markup)
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button(update, context):
     query = update.callback_query
     await query.answer()
     resolution = query.data
@@ -68,17 +89,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(output_file):
             os.remove(output_file)
 
-def main():
-    token = os.environ.get("BOT_TOKEN")
-    if not token:
-        print("BOT_TOKEN environment variable not set.")
-        return
-
-    application = ApplicationBuilder().token(token).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
-    application.add_handler(CallbackQueryHandler(button))
-    application.run_polling()
+def setup_dispatcher():
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video))
+    dispatcher.add_handler(CallbackQueryHandler(button))
 
 if __name__ == "__main__":
-    main()
+    setup_dispatcher()
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
